@@ -48,8 +48,8 @@ const int pin_switch = 0;          //D3 = GPIO0 pulled HIGH, else boot fail (mid
 #include "OSDManager.h"
 OLEDMenuManager oledMenu(&display);
 OSDManager osdManager;
-volatile OLEDMenuNav oledNav = OLEDMenuNav::IDLE;
-volatile uint8_t rotaryIsrID = 0;
+volatile int16_t encAccum = 0;   // signed quadrature transition accumulator (4 per detent)
+volatile uint8_t encEnter = 0;   // push-button flag
 #else
 String oled_menu[4] = {"Resolutions", "Presets", "Misc.", "Current Settings"};
 String oled_Resolutions[7] = {"1280x960", "1280x1024", "1280x720", "1920x1080", "480/576", "Downscale", "Pass-Through"};
@@ -7803,52 +7803,28 @@ volatile EncoderState encoderState = STATE_00;
 
 void IRAM_ATTR isrRotaryEncoderRotateForNewMenu()
 {
-    unsigned long interruptTime = millis();
-    static unsigned long lastInterruptTime = 0;
-    static unsigned long lastNavUpdateTime = 0;
-    static OLEDMenuNav lastNav;
     EncoderState newState = static_cast<EncoderState>((digitalRead(pin_clk) << 1) | digitalRead(pin_data));
-    OLEDMenuNav newNav = OLEDMenuNav::IDLE;
+    int8_t s = 0;
+    int8_t cwSign = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? 1 : -1;  // DOWN=+1, UP=-1
     switch (encoderState) {
-        case STATE_00:
-            if (newState == STATE_01) newNav = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? OLEDMenuNav::DOWN : OLEDMenuNav::UP;
-            else if (newState == STATE_10) newNav = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? OLEDMenuNav::UP : OLEDMenuNav::DOWN;
-            break;
-        case STATE_01:
-            if (newState == STATE_11) newNav = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? OLEDMenuNav::DOWN : OLEDMenuNav::UP;
-            else if (newState == STATE_00) newNav = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? OLEDMenuNav::UP : OLEDMenuNav::DOWN;
-            break;
-        case STATE_11:
-            if (newState == STATE_10) newNav = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? OLEDMenuNav::DOWN : OLEDMenuNav::UP;
-            else if (newState == STATE_01) newNav = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? OLEDMenuNav::UP : OLEDMenuNav::DOWN;
-            break;
-        case STATE_10:
-            if (newState == STATE_00) newNav = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? OLEDMenuNav::DOWN : OLEDMenuNav::UP;
-            else if (newState == STATE_11) newNav = REVERSE_ROTARY_ENCODER_FOR_OLED_MENU ? OLEDMenuNav::UP : OLEDMenuNav::DOWN;
-            break;
+        case STATE_00: if (newState == STATE_01) s = cwSign; else if (newState == STATE_10) s = -cwSign; break;
+        case STATE_01: if (newState == STATE_11) s = cwSign; else if (newState == STATE_00) s = -cwSign; break;
+        case STATE_11: if (newState == STATE_10) s = cwSign; else if (newState == STATE_01) s = -cwSign; break;
+        case STATE_10: if (newState == STATE_00) s = cwSign; else if (newState == STATE_11) s = -cwSign; break;
     }
-    encoderState = newState;  // 
-    if (interruptTime - lastInterruptTime > 100) {   
-        if ((newNav != lastNav && (interruptTime - lastNavUpdateTime < 120)) || (oled_menuItem != 0)){
-            oledNav = lastNav = OLEDMenuNav::IDLE;
-        }
-        else{
-            lastNav = oledNav = newNav;
-            ++rotaryIsrID;
-            lastNavUpdateTime = interruptTime;
-        }
-        lastInterruptTime = interruptTime;
-    }
+    encoderState = newState;
+    if (s == 0) return;  // diagonal transition (bounce artifact): ignore, no event consumed
+    noInterrupts();
+    encAccum = (int16_t)(encAccum + s);
+    interrupts();
 }
 void IRAM_ATTR isrRotaryEncoderPushForNewMenu()
 {
-    static unsigned long lastInterruptTime = 0;
-    unsigned long interruptTime = millis();
-    if ((interruptTime - lastInterruptTime > 500) && (oled_menuItem == 0)) {
-        oledNav = OLEDMenuNav::ENTER;
-        ++rotaryIsrID;
-    }
-    lastInterruptTime = interruptTime;
+    static unsigned long lastTime = 0;
+    unsigned long now = millis();
+    if (now - lastTime < 30) return;  // 30 ms contact-bounce debounce
+    lastTime = now;
+    encEnter = 1;
 }
 #endif
 
@@ -8614,13 +8590,20 @@ void loop()
     }
 #endif
 
-    uint8_t oldIsrID = rotaryIsrID;
-    if (NEW_OLED_MENU == true) {
-        oledMenu.tick(oledNav);
-        if (oldIsrID == rotaryIsrID) {
-            oledNav = OLEDMenuNav::IDLE;
+    noInterrupts();
+    int16_t acc = encAccum;  encAccum = 0;
+    uint8_t enter = encEnter; encEnter = 0;
+    interrupts();
+    if (NEW_OLED_MENU) {
+        if (enter) {
+            oledMenu.tick(OLEDMenuNav::ENTER);
+        } else if (acc != 0) {
+            int16_t detents = acc / 4;  // 4 quadrature transitions per detent
+            if (detents > 0) for (int i = 0; i < detents && i < 8; ++i) oledMenu.tick(OLEDMenuNav::DOWN);
+            if (detents < 0) for (int i = 0; i < -detents && i < 8; ++i) oledMenu.tick(OLEDMenuNav::UP);
         }
     }
+    // else: drained & discarded — no phantom move after PRO/IR menu closes
 
     // Update audio volume only when changed
     if ((millis() - lastSystemTime) >= 400) {
