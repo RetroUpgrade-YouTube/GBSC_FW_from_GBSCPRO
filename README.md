@@ -1,4 +1,4 @@
-I will be trying to back port the GBSC Pro fw back to this version removing all extra fetures that dont work on this model and fixing the Webui 
+I will be trying to back port the GBSC Pro fw back to this version removing all extra features that dont work on this model and fixing the Webui 
 
 will base the backport on the incredible work by https://github.com/brisma/gbsc-pro
 -------------------------------------------------------------------------------------------------------------
