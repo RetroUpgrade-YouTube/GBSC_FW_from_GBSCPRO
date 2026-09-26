@@ -1,5 +1,7 @@
 # AGENTS.md
 
+> **Before running any build/flash/debug commands, read [`MEMORY.md`](MEMORY.md)** — it contains toolchain paths, PowerShell gotchas, and environment-specific facts not derivable from source.
+
 ## 1. Overview
 
 This repository contains the complete software for a **GBSC / GBSC-Pro retro video processor**: firmware for a TV5725-based analog video scaler (RGB / YPbPr / VGA / S-Video / composite in → SD/HD progressive out) plus a cross-platform Python flashing tool.
