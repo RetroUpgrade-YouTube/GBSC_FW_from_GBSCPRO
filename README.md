@@ -3,6 +3,81 @@ I will be trying to back port the GBSC Pro fw back to this version removing all 
 will base the backport on the incredible work by https://github.com/brisma/gbsc-pro
 -------------------------------------------------------------------------------------------------------------
 
+# GBSC-Pro Firmware for Base GBSC Hardware
+
+This is GBSC-Pro firmware backported to run on the **base GBSC** board (no ADV/HC32F460, no STV9426 TV-OSD, no PT2257 audio attenuator, no IR receiver). All hardware-dependent drivers are no-op'd (APIs preserved, bodies emptied) so the firmware compiles cleanly and the missing chips are never touched.
+
+## What works on base hardware
+
+- **OLED menu + rotary encoder** — full navigation, presets, all settings
+- **36 profile slots** (A–Z, 0–9) with per-slot TV5725 register programs
+- **PRO Web UI** — PWA with slots, WiFi management, all PRO settings, developer overrides
+- **Developer overrides** — NTSC/PAL Htotal, PLL div, SDRAM clock, ADC filter, OSR, SOG level, sync invert, screen move/scale
+- **gbsColor** (R/G/B color balance), **hdmiLimitedRange**, **PAL-60 forcing**
+- **Sync automation** — SOG/phase auto-tuning, auto-best Htotal, input detection
+- **WiFi + WebSocket status**, mDNS `gbscontrol.local`, AP fallback
+- **Frame-time lock (FTL)**, deinterlacing, scanlines, VDS filters
+- **HDMI limited-range**, YPbPr/component output, HD bypass, RGBHV scaling/bypass
+- **ADC auto-gain + offset calibration**
+- **Si5351 external clock generator** support
+
+## What is disabled (no hardware on base GBSC)
+
+| Feature | Requires | Status |
+|---|---|---|
+| S-Video / composite input | ADV7280/ADV7391 + HC32F460 (ADV MCU) | No-op stub |
+| TV OSD (on-screen display) | STV9426 chip | No-op stub |
+| Audio volume / mute | PT2257 attenuator | No-op stub |
+| IR remote control | IR receiver diode | No-op stub (decode always returns false) |
+
+These features are **inert** — no UART, I2C, or GPIO traffic is generated for them. They can be safely ignored in the menu/web UI.
+
+## Notable changes vs stock GBSC-Pro firmware
+
+1. **Rotary encoder rewritten** — replaced the buggy 100 ms-gate single-cell handoff with a quadrature transition accumulator. Fixes missed rotations (fast flicks no longer drop clicks) and double jumps (contact bounce nets out atomically). Enter button uses a separate 30 ms-debounced flag.
+2. **All missing-hardware drivers no-op'd** — `adv_controller.h`, `pt2257.h`, `stv9426.h`, `ir_remote.h` have empty bodies but preserve every public symbol so higher-level code compiles unchanged.
+3. **AGENTS.md** — 676-line canonical repo guide (architecture, data flow, persistence map, build pipeline, invariants, gotchas).
+
+## Building
+
+```bash
+cd gbs-control
+pio run
+# output: .pio/build/gbsc-pro/firmware.bin  (~785 KB)
+```
+
+Toolchain: PlatformIO, `espressif8266@4.2.1`, `d1_mini` (4 MB flash, LittleFS, 160 MHz).
+
+## Flashing
+
+```bash
+# Option A: via PlatformIO
+cd gbs-control && pio run --target upload
+
+# Option B: via the Python flasher
+pip install pyserial esptool
+python gbsc-pro-flasher/gbsc_flasher.py --esp gbs-control/.pio/build/gbsc-pro/firmware.bin
+```
+
+**Hardware note:** GPIO0 (rotary encoder push) must be pulled HIGH at power-on or the ESP8266 will not boot.
+
+## Repository layout
+
+| Path | Purpose |
+|---|---|
+| `gbs-control/` | ESP8266 firmware (PlatformIO project) |
+| `gbs-control/pro/` | GBSC-Pro layer (menu, OSD, drivers — drivers no-op'd) |
+| `gbs-control/public/` | Web UI source (TypeScript PWA) + build tooling |
+| `gbsc-pro-flasher/` | Python GUI/CLI flasher (ESP8266 + ADV) |
+| `AGENTS.md` | Canonical repo guide (architecture, invariants, build steps) |
+
+## Provenance
+
+- Base firmware: [ramapcsx2/gbs-control](https://github.com/ramapcsx2/gbs-control)
+- Pro fork: [brisma/gbsc-pro](https://github.com/brisma/gbsc-pro)
+- Firmware version: `GBS_FW_VERSION 2.4.1`
+
+---
 
 # GBSC
 **INTRODUCTION** 
