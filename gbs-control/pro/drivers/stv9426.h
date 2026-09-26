@@ -292,14 +292,11 @@ inline uint8_t OSD_resolveColor(uint8_t row, uint8_t color) {
 // Low-Level I2C Communication
 // ====================================================================================
 
-// Send 3-byte command to STV9426 via I2C
+// NO-OP (old GBSC has NO STV9426 TV-OSD chip). Every higher-level OSD_* writer
+// ultimately calls this, so they all become inert. Signature preserved.
 inline void OSD_sendCommand(char reg, char bank, char value)
 {
-    Wire.beginTransmission(ADDR_STV);
-    Wire.write(reg);       // Register address
-    Wire.write(bank);      // Memory bank (0x00=row1, 0x02=row2, 0x03=row3)
-    Wire.write(value);     // Value to write
-    Wire.endTransmission();
+    (void)reg; (void)bank; (void)value;
 }
 
 // ====================================================================================
@@ -585,22 +582,10 @@ inline void OSD_setPWMAll(uint8_t value)
 
 // Read single byte from STV9426
 // Returns the byte at the specified address
+// NO-OP (old GBSC has NO STV9426 chip). Returns 0.
 inline uint8_t OSD_readByte(uint16_t address)
 {
-    uint8_t addrLSB = address & 0xFF;
-    uint8_t addrMSB = (address >> 8) & 0x3F;  // Only 14 bits used
-
-    // First sequence: write address
-    Wire.beginTransmission(ADDR_STV);
-    Wire.write(addrLSB);
-    Wire.write(addrMSB);
-    Wire.endTransmission();
-
-    // Second sequence: read data
-    Wire.requestFrom(ADDR_STV, (uint8_t)1);
-    if (Wire.available()) {
-        return Wire.read();
-    }
+    (void)address;
     return 0;
 }
 
@@ -608,22 +593,10 @@ inline uint8_t OSD_readByte(uint16_t address)
 // buffer: destination buffer
 // address: starting address
 // length: number of bytes to read
+// NO-OP (old GBSC has NO STV9426 chip).
 inline void OSD_readBytes(uint8_t* buffer, uint16_t address, uint8_t length)
 {
-    uint8_t addrLSB = address & 0xFF;
-    uint8_t addrMSB = (address >> 8) & 0x3F;
-
-    // First sequence: write address
-    Wire.beginTransmission(ADDR_STV);
-    Wire.write(addrLSB);
-    Wire.write(addrMSB);
-    Wire.endTransmission();
-
-    // Second sequence: read data
-    Wire.requestFrom(ADDR_STV, length);
-    for (uint8_t i = 0; i < length && Wire.available(); i++) {
-        buffer[i] = Wire.read();
-    }
+    (void)buffer; (void)address; (void)length;
 }
 
 // Read register value (registers are at 0x3FF0-0x3FFF)
@@ -650,34 +623,19 @@ inline uint8_t OSD_readRegister(uint8_t reg)
 // sliceNum: slice number (0-18, slice 18 is for vertical shadow only)
 // pixelsLow: pixels 0-7 (bit 0 = PX0 = rightmost pixel)
 // pixelsHigh: pixels 8-11 in bits 0-3 (bit 0 = PX8)
+// NO-OP (old GBSC has NO STV9426 chip).
 inline void OSD_writeUDCSlice(uint8_t charNum, uint8_t sliceNum, uint8_t pixelsLow, uint8_t pixelsHigh)
 {
-    if (charNum > 25 || sliceNum > 18) return;
-    uint16_t baseAddr = 38 * charNum + sliceNum * 2;
-    // Write to RAM (address space 0x0000-0x03FF)
-    Wire.beginTransmission(ADDR_STV);
-    Wire.write(baseAddr & 0xFF);           // LSB address
-    Wire.write((baseAddr >> 8) & 0x3F);    // MSB address
-    Wire.write(pixelsLow);                 // Pixels 0-7
-    Wire.write(pixelsHigh & 0x0F);         // Pixels 8-11 (only lower 4 bits)
-    Wire.endTransmission();
+    (void)charNum; (void)sliceNum; (void)pixelsLow; (void)pixelsHigh;
 }
 
 // Write complete UDC from 38-byte array
 // charNum: character number (0-25)
 // data: 38 bytes (19 slices x 2 bytes, even=PX7-0, odd=PX11-8)
+// NO-OP (old GBSC has NO STV9426 chip).
 inline void OSD_writeUDC(uint8_t charNum, const uint8_t* data)
 {
-    if (charNum > 25) return;
-    uint16_t baseAddr = 38 * charNum;
-
-    Wire.beginTransmission(ADDR_STV);
-    Wire.write(baseAddr & 0xFF);
-    Wire.write((baseAddr >> 8) & 0x3F);
-    for (uint8_t i = 0; i < 38; i++) {
-        Wire.write(data[i]);
-    }
-    Wire.endTransmission();
+    (void)charNum; (void)data;
 }
 
 // Read UDC data

@@ -28,4 +28,27 @@
 #define IR_KEY_VOL_UP  0xEA52906F
 #define IR_KEY_VOL_DN  0xEA5250AF
 
+// ====================================================================================
+// No-op IR receiver (old GBSC has NO IR hardware).
+//
+// Provides the minimal IRrecv / decode_results API the Pro code expects so the
+// IRremoteESP8266 library can be dropped while every symbol still resolves.
+// decode() always returns false => a key is never "decoded" => IR path is inert.
+// Only the members actually used by the code are provided (value, repeat).
+// ====================================================================================
+
+struct decode_results {
+    uint32_t value;   // decoded NEC key (0 = none); 0xFFFFFFFF = NEC repeat marker
+    bool     repeat;  // NEC repeat flag
+    decode_results() : value(0), repeat(false) {}
+};
+
+class IRrecv {
+public:
+    explicit IRrecv(uint8_t pin) { (void)pin; }
+    void enableIRIn() {}
+    bool decode(decode_results* results) { (void)results; return false; }
+    void resume() {}
+};
+
 #endif // IR_REMOTE_H_

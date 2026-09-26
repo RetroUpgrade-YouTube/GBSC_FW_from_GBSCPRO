@@ -62,8 +62,7 @@ template <uint8_t> class TV5725;
 // External Variables - IR Remote
 // ====================================================================================
 
-#include <IRremoteESP8266.h>
-#include <IRrecv.h>
+#include "drivers/ir_remote.h"
 
 extern IRrecv irrecv;
 extern decode_results results;

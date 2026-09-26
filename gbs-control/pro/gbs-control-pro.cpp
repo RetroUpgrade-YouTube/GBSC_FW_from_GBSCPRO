@@ -27,8 +27,6 @@
 #include "../ntsc_720x480.h"
 #include "../src/WebSocketsServer.h"
 
-#include <IRremoteESP8266.h>
-#include <IRutils.h>
 #include <SSD1306Wire.h>
 
 #include "drivers/ir_remote.h"

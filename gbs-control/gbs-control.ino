@@ -25,8 +25,6 @@
 
 // GBSC-Pro extensions (IR remote, OSD, audio control, etc.)
 #include "pro/gbs-control-pro.h"
-#include <IRremoteESP8266.h>
-#include <IRutils.h>
 #include "pro/drivers/ir_remote.h"
 #include "pro/drivers/stv9426.h"
 #include "pro/drivers/pt2257.h"

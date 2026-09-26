@@ -183,101 +183,19 @@ static const uint8_t ADV_VideoFormats[12] = {
  *
  * All methods handle random byte injection, end marker, and checksum automatically.
  */
+// ====================================================================================
+// NO-OP STUB (old GBSC has NO ADV / HC32F460 controller).
+// Keeps the exact public API (constructor + send/sendWithMode/writeReg/sendCustomI2C)
+// so every ADV_send* wrapper and all call sites still compile & link, but performs
+// no UART traffic. All packet/constant definitions above remain intact.
+// ====================================================================================
 class ADVController {
 public:
-    /**
-     * @brief Construct packet sender with serial port
-     * @param serial Reference to HardwareSerial (default: Serial)
-     */
-    explicit ADVController(HardwareSerial& serial = Serial) : m_serial(serial) {
-        randomSeed(analogRead(A0));
-    }
-
-    /**
-     * @brief Send a standard 4-byte command packet
-     * @param buff 4-byte base packet [header0, header1, cmd, data]
-     *
-     * Output: [buff[0..3]] [random] [0xFE] [checksum]
-     */
-    void send(const unsigned char* buff) {
-        unsigned char packet[ADV_PACKET_SIZE];
-        packet[0] = buff[0];
-        packet[1] = buff[1];
-        packet[2] = buff[2];
-        packet[3] = buff[3];
-        packet[4] = random(254);
-        packet[5] = ADV_END_MARKER;
-        packet[6] = packet[0] + packet[1] + packet[2] + packet[3] + packet[4] + packet[5];
-        m_serial.write(packet, ADV_PACKET_SIZE);
-    }
-
-    /**
-     * @brief Send command with mode bits merged into data byte
-     * @param buff 4-byte base packet
-     * @param mode Mode value (lower 4 bits OR'd into buff[3])
-     */
-    void sendWithMode(const unsigned char* buff, uint8_t mode) {
-        unsigned char packet[4];
-        memcpy(packet, buff, 4);
-        packet[3] |= (mode & 0x0F);
-        send(packet);
-    }
-
-    /**
-     * @brief Send register write command (for BCSH adjustments)
-     * @param buff 4-byte base packet (buff[2] = command, buff[3] ignored)
-     * @param reg Target register address
-     * @param val Value to write
-     *
-     * Output: [header0, header1, cmd, reg, val, 0xFE, checksum]
-     */
-    void writeReg(const unsigned char* buff, unsigned char reg, unsigned char val) {
-        unsigned char packet[ADV_PACKET_SIZE];
-        packet[0] = buff[0];
-        packet[1] = buff[1];
-        packet[2] = buff[2];
-        packet[3] = reg;
-        packet[4] = val;
-        packet[5] = ADV_END_MARKER;
-        unsigned char sum = 0;
-        for (int i = 0; i < 6; ++i) sum += packet[i];
-        packet[6] = sum;
-        m_serial.write(packet, ADV_PACKET_SIZE);
-    }
-
-    /**
-     * @brief Send custom I2C batch command
-     * @param data Array of I2C triplets [addr, reg, val, addr, reg, val, ...]
-     * @param size Total bytes (must be multiple of 3)
-     *
-     * Output: [header0, header1, 'C', count, triplets..., 0xFE, checksum]
-     * Each triplet: [I2C_addr, register, value]
-     */
-    void sendCustomI2C(const unsigned char* data, size_t size) {
-        if (size == 0 || size % 3 != 0) return;
-
-        uint8_t count = size / 3;
-
-        m_serial.write((uint8_t)ADV_HEADER_0);
-        m_serial.write((uint8_t)ADV_HEADER_1);
-        m_serial.write((uint8_t)ADV_CMD_CUSTOM);
-        m_serial.write(count);
-
-        unsigned char sum = ADV_HEADER_0 + ADV_HEADER_1 + ADV_CMD_CUSTOM + count;
-
-        for (size_t i = 0; i < size; ++i) {
-            m_serial.write(data[i]);
-            sum += data[i];
-        }
-
-        m_serial.write((uint8_t)ADV_END_MARKER);
-        sum += ADV_END_MARKER;
-
-        m_serial.write(sum);
-    }
-
-private:
-    HardwareSerial& m_serial;
+    explicit ADVController(HardwareSerial& serial = Serial) { (void)serial; }
+    void send(const unsigned char* buff) { (void)buff; }
+    void sendWithMode(const unsigned char* buff, uint8_t mode) { (void)buff; (void)mode; }
+    void writeReg(const unsigned char* buff, unsigned char reg, unsigned char val) { (void)buff; (void)reg; (void)val; }
+    void sendCustomI2C(const unsigned char* data, size_t size) { (void)data; (void)size; }
 };
 
 #endif // ADV_CONTROLLER_H_
