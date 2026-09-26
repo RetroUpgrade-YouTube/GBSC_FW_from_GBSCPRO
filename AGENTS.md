@@ -370,7 +370,7 @@ pio device monitor               # serial monitor @ 115200
 pio run --target uploadfs        # (if needed) upload LittleFS contents — slots/presets are written by the device itself
 ```
 
-Relevant settings (`gbs-control/platformio.ini:15-34`): `espressif8266@4.2.1`, `board = d1_mini`, `board_build.f_cpu = 160000000L`, `board_build.ldscript = eagle.flash.4m1m.ld`, `board_build.filesystem = littlefs`, `board_build.flash_mode = qio`, source filter `+<**/*.c> +<**/*.cpp> +<**/*.ino> -<./3rdparty/*>`. Libs come from `lib_dir = ./src/` plus `lib_deps` (esp32async forks, SSD1306Wire, IRremoteESP8266).
+Relevant settings (`gbs-control/platformio.ini:15-34`): `espressif8266@4.2.1`, `board = d1_mini`, `board_build.f_cpu = 160000000L`, `board_build.ldscript = eagle.flash.4m1m.ld`, `board_build.filesystem = littlefs`, `board_build.flash_mode = qio`, source filter `+<**/*.c> +<**/*.cpp> +<**/*.ino> -<./3rdparty/*>`. Libs come from `lib_dir = ./src/` plus `lib_deps` (esp32async forks, SSD1306Wire).
 
 > ⚠️ The flasher's `gbsc-pro-flasher/README.md` says the output is `.pio/build/esp8266/firmware.bin` — that is **wrong for this tree**; the env is named `gbsc-pro`, so the real path is `.pio/build/gbsc-pro/firmware.bin`.
 
