@@ -36,6 +36,7 @@ These are **inert** — no UART/I2C/GPIO traffic. Safe to ignore in menus.
 1. **Rotary encoder rewritten** — quadrature transition accumulator replaces the buggy 100 ms-gate single-cell handoff. Fixes missed rotations and double jumps.
 2. **Missing-hardware drivers no-op'd** — `adv_controller.h`, `pt2257.h`, `stv9426.h`, `ir_remote.h` have empty bodies, all symbols preserved.
 3. **AGENTS.md** — 676-line canonical repo guide (architecture, invariants, build pipeline).
+4. **Flasher: pre-flash firmware backup** — `gbsc_flasher.py` gains a `--backup` CLI flag (and a GUI checkbox) that dumps the full 4 MB ESP8266 flash to a timestamped `.bin` before any erase/write, so the current firmware is always recoverable.
 
 ---
 

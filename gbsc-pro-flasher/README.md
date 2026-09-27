@@ -14,6 +14,7 @@ Cross-platform firmware flash tool for GBSC Pro with automatic device detection.
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **USB Hotplug Detection**: Automatically refreshes when devices are connected/disconnected
 - **Drag & Drop**: Drop firmware files directly into the GUI
+- **Firmware Backup**: Dump the full ESP8266 flash before flashing (or standalone)
 
 ## Supported Devices
 
@@ -71,7 +72,13 @@ python gbsc_flasher.py
 The GUI will:
 1. Automatically detect connected GBSC devices
 2. Allow you to select a firmware file (or drag & drop)
-3. Flash with a single click
+3. Optionally backup the current ESP8266 firmware before flashing
+4. Flash with a single click
+
+For ESP8266 devices, an "ESP Options" group appears with checkboxes:
+- **Backup current firmware before flashing** — saves a full 4 MB flash dump
+  to a timestamped `.bin` file next to the firmware before any write
+- **Erase user data** / **Erase WiFi credentials** — selective flash wipes
 
 ### CLI Mode
 
@@ -97,6 +104,22 @@ python gbsc_flasher.py --adv firmware.bin
 python gbsc_flasher.py --esp firmware.bin
 ```
 
+#### Backup current firmware (ESP8266 only)
+
+```bash
+# Backup then flash new firmware
+python gbsc_flasher.py --backup firmware.bin
+
+# Backup only (no flashing)
+python gbsc_flasher.py --backup
+
+# Backup to a specific file, then flash
+python gbsc_flasher.py --backup --backup-path backup_before_update.bin firmware.bin
+```
+
+The backup dumps the full 4 MB flash (firmware + LittleFS slots/presets + WiFi config)
+to a timestamped `.bin` file by default, or to `--backup-path` if specified.
+
 #### List detected devices
 
 ```bash
@@ -110,6 +133,10 @@ python gbsc_flasher.py --list
 | `--gui` | Launch GUI mode (default if no firmware specified) |
 | `--adv` | Force ADV Controller (HC32F460) mode |
 | `--esp` | Force ESP8266 (GBS-Control) mode |
+| `--backup` | ESP only: dump full flash before flashing (or standalone) |
+| `--backup-path FILE` | Output path for `--backup` (default: `esp8266_backup_<timestamp>.bin`) |
+| `--erase-user` | ESP only: erase user data (sketch, slots, EEPROM), keep WiFi |
+| `--erase-wifi` | ESP only: erase WiFi credentials (SDK system param area) |
 | `--list` | List all detected devices and exit |
 | `--version` | Show version and exit |
 | `--help` | Show help message |

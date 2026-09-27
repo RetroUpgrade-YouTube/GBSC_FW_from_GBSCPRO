@@ -555,6 +555,53 @@ class ESPFlasher:
         self._status("Erase complete!")
         return True
 
+    def backup_flash(self, output_path: str) -> bool:
+        """Dump the full 4 MB flash to a file using esptool read_flash."""
+        if os.path.exists(output_path):
+            self._error(f"Backup file already exists: {output_path}")
+            self._error("Remove it or choose a different name.")
+            return False
+
+        try:
+            import esptool
+        except ImportError:
+            self._error("esptool not found. Install with: pip install esptool")
+            return False
+
+        self._status(f"Reading full flash (4 MB) → {os.path.basename(output_path)} ...")
+
+        args = [
+            "--chip", "esp8266",
+            "--port", self.port,
+            "--baud", str(ESP_BAUD),
+            "--before", "default_reset",
+            "--after", "hard_reset",
+            "read_flash",
+            "-o", output_path,
+            "0x0", "0x400000",
+        ]
+
+        try:
+            esptool.main(args)
+            if os.path.exists(output_path):
+                size = os.path.getsize(output_path)
+                self._status(f"Backup saved: {output_path} ({size} bytes)")
+                return True
+            else:
+                self._error("esptool finished but output file was not created.")
+                return False
+        except SystemExit as e:
+            if e.code == 0:
+                if os.path.exists(output_path):
+                    size = os.path.getsize(output_path)
+                    self._status(f"Backup saved: {output_path} ({size} bytes)")
+                    return True
+            self._error(f"Backup failed (esptool exit code {e.code})")
+            return False
+        except Exception as e:
+            self._error(f"Backup error: {e}")
+            return False
+
     def flash(self, firmware_path: str) -> bool:
         if not os.path.exists(firmware_path):
             self._error(f"File not found: {firmware_path}")
@@ -707,7 +754,8 @@ def create_flasher(controller_type: ControllerType, port: str):
 
 def run_cli(port: Optional[str], firmware: Optional[str],
             force_type: Optional[ControllerType] = None,
-            erase_user: bool = False, erase_wifi: bool = False) -> int:
+            erase_user: bool = False, erase_wifi: bool = False,
+            backup: bool = False, backup_path: Optional[str] = None) -> int:
     print()
     print("  GBSC Pro Flasher v" + __version__)
     print("  " + "=" * 50)
@@ -716,14 +764,14 @@ def run_cli(port: Optional[str], firmware: Optional[str],
     has_firmware = bool(firmware and os.path.exists(firmware))
     has_erase = erase_user or erase_wifi
 
-    if not has_firmware and not has_erase:
-        print("  [!] Provide a firmware file or an erase option (--erase-user / --erase-wifi).")
+    if not has_firmware and not has_erase and not backup:
+        print("  [!] Provide a firmware file, an erase option, or --backup.")
         return 1
 
-    # Erase options imply ESP target.
-    if has_erase:
+    # Erase and backup options imply ESP target.
+    if has_erase or backup:
         if force_type and force_type != ControllerType.ESP:
-            print("  [!] --erase-user / --erase-wifi only apply to ESP8266.")
+            print("  [!] --erase-user / --erase-wifi / --backup only apply to ESP8266.")
             return 1
         force_type = ControllerType.ESP
 
@@ -734,7 +782,7 @@ def run_cli(port: Optional[str], firmware: Optional[str],
             if has_firmware:
                 _, port = auto_detect(None, firmware)
             if not port:
-                # Fallback: find any ESP port for erase-only mode.
+                # Fallback: find any ESP port for erase/backup-only mode.
                 for p in serial.tools.list_ports.comports():
                     if detect_port_type(p.device) == controller_type:
                         port = p.device
@@ -760,6 +808,9 @@ def run_cli(port: Optional[str], firmware: Optional[str],
 
     print(f"  Device:   {controller_type.value}")
     print(f"  Port:     {port}")
+    if backup:
+        backup_display = os.path.basename(backup_path) if backup_path else "(auto-generated)"
+        print(f"  Backup:   {backup_display}")
     if has_firmware:
         print(f"  Firmware: {os.path.basename(firmware)}")
     if has_erase:
@@ -785,7 +836,15 @@ def run_cli(port: Optional[str], firmware: Optional[str],
 
     try:
         success = True
-        if has_erase and isinstance(flasher, ESPFlasher):
+
+        # Backup before any destructive operation
+        if backup and isinstance(flasher, ESPFlasher):
+            if not backup_path:
+                ts = time.strftime("%Y%m%d_%H%M%S")
+                backup_path = f"esp8266_backup_{ts}.bin"
+            success = flasher.backup_flash(backup_path)
+
+        if success and has_erase and isinstance(flasher, ESPFlasher):
             success = flasher.erase(erase_user, erase_wifi)
         if success and has_firmware:
             success = flasher.flash(firmware)
@@ -830,13 +889,16 @@ def run_gui():
         finished_signal = Signal(bool)
 
         def __init__(self, controller: ControllerType, port: str, firmware: str,
-                     erase_user: bool = False, erase_wifi: bool = False):
+                     erase_user: bool = False, erase_wifi: bool = False,
+                     backup: bool = False, backup_path: str = ""):
             super().__init__()
             self.controller = controller
             self.port = port
             self.firmware = firmware  # may be empty in erase-only mode
             self.erase_user = erase_user
             self.erase_wifi = erase_wifi
+            self.backup = backup
+            self.backup_path = backup_path
 
         def run(self):
             flasher = create_flasher(self.controller, self.port)
@@ -846,7 +908,10 @@ def run_gui():
 
             try:
                 success = True
-                if self.controller == ControllerType.ESP and (self.erase_user or self.erase_wifi):
+                # Backup before any destructive operation
+                if self.backup and isinstance(flasher, ESPFlasher):
+                    success = flasher.backup_flash(self.backup_path)
+                if success and self.controller == ControllerType.ESP and (self.erase_user or self.erase_wifi):
                     success = flasher.erase(self.erase_user, self.erase_wifi)
                 if success and self.firmware:
                     success = flasher.flash(self.firmware)
@@ -978,11 +1043,17 @@ def run_gui():
 
             layout.addWidget(fw_group)
 
-            # ESP-only erase options (hidden when ADV is selected).
-            # Both checked => full chip erase. Either alone => region erase.
-            self.esp_options_group = QGroupBox("ESP Flash Wipe (optional)")
+            # ESP-only options (hidden when ADV is selected).
+            self.esp_options_group = QGroupBox("ESP Options (optional)")
             esp_options_layout = QVBoxLayout(self.esp_options_group)
 
+            self.backup_checkbox = QCheckBox(
+                "Backup current firmware before flashing"
+            )
+            self.backup_checkbox.stateChanged.connect(self.update_detection)
+            esp_options_layout.addWidget(self.backup_checkbox)
+
+            # Both checked => full chip erase. Either alone => region erase.
             self.erase_user_checkbox = QCheckBox(
                 "Erase user data — keeps WiFi"
             )
@@ -1138,26 +1209,28 @@ def run_gui():
 
             self.update_flash_button_style()
 
-            # Show ESP wipe options only when ESP is the active target.
+            # Show ESP options only when ESP is the active target.
             is_esp = self.detected_type == ControllerType.ESP
             self.esp_options_group.setVisible(is_esp)
             if not is_esp:
                 # Avoid stale checked state leaking into next ESP session
+                self.backup_checkbox.setChecked(False)
                 self.erase_user_checkbox.setChecked(False)
                 self.erase_wifi_checkbox.setChecked(False)
 
             has_port = bool(port and port != "")
             has_firmware = bool(firmware and os.path.exists(firmware))
+            backup_active = is_esp and self.backup_checkbox.isChecked()
             erase_active = is_esp and (
                 self.erase_user_checkbox.isChecked() or
                 self.erase_wifi_checkbox.isChecked()
             )
 
-            # Enable button if we can either flash, erase, or both.
+            # Enable button if we can flash, erase, or backup.
             can_act = (
                 self.detected_type != ControllerType.UNKNOWN and
                 has_port and
-                (has_firmware or erase_active)
+                (has_firmware or erase_active or backup_active)
             )
             self.flash_btn.setEnabled(can_act)
 
@@ -1166,6 +1239,8 @@ def run_gui():
                 self.flash_btn.setText("Erase && Flash Firmware")
             elif erase_active:
                 self.flash_btn.setText("Erase Flash")
+            elif backup_active and not has_firmware:
+                self.flash_btn.setText("Backup Firmware")
             else:
                 self.flash_btn.setText("Flash Firmware")
 
@@ -1192,6 +1267,7 @@ def run_gui():
             port = self.port_combo.currentData()
             firmware = self.fw_path.text()
             is_esp = self.detected_type == ControllerType.ESP
+            backup = is_esp and self.backup_checkbox.isChecked()
             erase_user = is_esp and self.erase_user_checkbox.isChecked()
             erase_wifi = is_esp and self.erase_wifi_checkbox.isChecked()
             has_firmware = bool(firmware and os.path.exists(firmware))
@@ -1205,9 +1281,9 @@ def run_gui():
                 QMessageBox.warning(self, "Error", "Could not detect device type")
                 return
 
-            if not has_firmware and not has_erase:
+            if not has_firmware and not has_erase and not backup:
                 QMessageBox.warning(self, "Error",
-                                    "Select a firmware file or enable an erase option")
+                                    "Select a firmware file, enable an erase option, or check backup")
                 return
 
             # Confirmation dialog for destructive erase operations.
@@ -1239,12 +1315,15 @@ def run_gui():
 
             self.flash_btn.setEnabled(False)
             self.port_combo.setEnabled(False)
+            self.backup_checkbox.setEnabled(False)
             self.erase_user_checkbox.setEnabled(False)
             self.erase_wifi_checkbox.setEnabled(False)
             self.progress_bar.setValue(0)
             self.log_text.clear()
 
             actions = []
+            if backup:
+                actions.append("backup")
             if has_erase:
                 if erase_user and erase_wifi:
                     actions.append("full erase")
@@ -1255,10 +1334,21 @@ def run_gui():
                 actions.append("flash")
             self.log(f"[*] {self.detected_type.value}: {' + '.join(actions)}...")
 
+            # Generate backup path
+            backup_path = ""
+            if backup:
+                ts = time.strftime("%Y%m%d_%H%M%S")
+                if has_firmware:
+                    dir_name = os.path.dirname(os.path.abspath(firmware))
+                else:
+                    dir_name = os.getcwd()
+                backup_path = os.path.join(dir_name, f"esp8266_backup_{ts}.bin")
+
             self.worker = FlashWorker(
                 self.detected_type, port,
                 firmware if has_firmware else "",
                 erase_user=erase_user, erase_wifi=erase_wifi,
+                backup=backup, backup_path=backup_path,
             )
             self.worker.progress.connect(self.on_progress)
             self.worker.status.connect(self.on_status)
@@ -1279,6 +1369,7 @@ def run_gui():
         def on_finished(self, success: bool):
             self.flash_btn.setEnabled(True)
             self.port_combo.setEnabled(True)
+            self.backup_checkbox.setEnabled(True)
             self.erase_user_checkbox.setEnabled(True)
             self.erase_wifi_checkbox.setEnabled(True)
 
@@ -1328,6 +1419,11 @@ Examples:
     python gbsc_flasher.py --erase-user firmware.bin     # wipe user data + flash
     python gbsc_flasher.py --erase-user --erase-wifi     # full chip wipe
 
+  Backup current firmware (before or instead of flashing):
+    python gbsc_flasher.py --backup firmware.bin         # backup + flash
+    python gbsc_flasher.py --backup                       # backup only
+    python gbsc_flasher.py --backup --backup-path dump.bin firmware.bin
+
   List devices:
     python gbsc_flasher.py --list
 
@@ -1348,6 +1444,10 @@ Supported platforms: Windows, macOS, Linux
                         help='ESP only: erase user data (sketch, slots, EEPROM), keep WiFi')
     parser.add_argument('--erase-wifi', action='store_true',
                         help='ESP only: erase WiFi credentials (SDK system param area)')
+    parser.add_argument('--backup', action='store_true',
+                        help='ESP only: backup full flash before flashing (or standalone)')
+    parser.add_argument('--backup-path',
+                        help='Output path for --backup (default: esp8266_backup_<timestamp>.bin)')
     parser.add_argument('--list', action='store_true',
                         help='List detected devices')
     parser.add_argument('--version', action='version',
@@ -1399,11 +1499,13 @@ Supported platforms: Windows, macOS, Linux
     elif args.esp:
         force_type = ControllerType.ESP
 
-    # CLI mode if firmware OR an erase option is provided
-    if firmware or args.erase_user or args.erase_wifi:
+    # CLI mode if firmware OR an erase/backup option is provided
+    if firmware or args.erase_user or args.erase_wifi or args.backup:
         sys.exit(run_cli(port, firmware, force_type,
                          erase_user=args.erase_user,
-                         erase_wifi=args.erase_wifi))
+                         erase_wifi=args.erase_wifi,
+                         backup=args.backup,
+                         backup_path=args.backup_path))
 
     # Default: GUI mode
     run_gui()
